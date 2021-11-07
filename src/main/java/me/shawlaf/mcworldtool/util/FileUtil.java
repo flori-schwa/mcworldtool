@@ -5,6 +5,9 @@ import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
 import java.util.Objects;
 
 @UtilityClass
@@ -78,4 +81,31 @@ public class FileUtil {
         }
     }
 
+    @SneakyThrows
+    public long calculateSize(File self) {
+        if (self.isDirectory()) {
+            long total = 0;
+
+            for (File file : self.listFiles()) {
+                total += calculateSize(file);
+            }
+
+            return total;
+        } else {
+            return Files.size(self.toPath());
+        }
+    }
+
+    // https://stackoverflow.com/a/3758880
+    public String humanReadableByteCountSI(long bytes) {
+        if (-1000 < bytes && bytes < 1000) {
+            return bytes + " B";
+        }
+        CharacterIterator ci = new StringCharacterIterator("kMGTPE");
+        while (bytes <= -999_950 || bytes >= 999_950) {
+            bytes /= 1000;
+            ci.next();
+        }
+        return String.format("%.1f %cB", bytes / 1000.0, ci.current());
+    }
 }

@@ -8,6 +8,7 @@ import me.shawlaf.mcworldtool.anvil.AnvilChunk;
 import me.shawlaf.mcworldtool.region.RegionChunk;
 import me.shawlaf.mcworldtool.region.RegionFile;
 import me.shawlaf.mcworldtool.region.RegionUtil;
+import me.shawlaf.mcworldtool.util.DirectoryTraversal;
 import me.shawlaf.mcworldtool.util.FileUtil;
 import me.shawlaf.mcworldtool.util.MultithreadUtil;
 
@@ -43,16 +44,12 @@ public class TaskPurgeWorld {
             return;
         }
 
-        if (!inputFile.child("region").exists()) {
-            System.err.println("Input directory has no \"region\" folder");
-            return;
-        }
-
         File outputPath = inputFile.getParentFile().getAbsoluteFile().child("%s-purged".formatted(inputFile.getName()));
         inputFile.copyDirectoryRecursively(outputPath);
 
-        File outputRegionFolder = outputPath.requiredChild("region");
-        File[] mcaFiles = outputRegionFolder.listFiles();
+        File[] mcaFiles = DirectoryTraversal.discoverWhere(outputPath,
+                f -> f.getName().endsWith(".mca") && "region".equals(f.getParentFile().getAbsoluteFile().getName())
+        ).toArray(File[]::new);
 
         int nThreads = Runtime.getRuntime().availableProcessors();
         File[][] threadFiles = MultithreadUtil.splitTaskForNThreads(File.class, nThreads, mcaFiles, File[]::new, File[][]::new);
@@ -78,6 +75,13 @@ public class TaskPurgeWorld {
         for (Thread thread : threads) {
             thread.join();
         }
+
+        long originalSize = inputFile.calculateSize();
+        long newSize = outputPath.calculateSize();
+
+        System.out.println();
+        System.out.println("Original World Size: " + FileUtil.humanReadableByteCountSI(originalSize));
+        System.out.println("Purged World Size: " + FileUtil.humanReadableByteCountSI(newSize));
     }
 
     @SneakyThrows
@@ -98,7 +102,8 @@ public class TaskPurgeWorld {
                 CompoundTag chunkData = regionFile.loadChunk(regionChunk);
                 AnvilChunk chunk = AnvilChunk.withTag(chunkData);
 
-                if (chunk.getInhabitedTime() > 2 * 20 * 60) { // 2 Minutes
+                // 60 seconds and no Tile Entities
+                if (chunk.getInhabitedTime() > 60 * 20 || chunk.getTileEntities().size() > 0) {
                     target.addChunk(cx, cz, regionChunk);
                 } else {
                     ++removedChunks;
@@ -110,8 +115,6 @@ public class TaskPurgeWorld {
             target.write(fos);
         }
 
-        System.out.printf("Purged %d Chunks from %s%n", removedChunks, mcaFile.getName());
+        System.out.printf("Purged %d Chunks from %s%n", removedChunks, mcaFile.getAbsolutePath());
     }
-
-
 }

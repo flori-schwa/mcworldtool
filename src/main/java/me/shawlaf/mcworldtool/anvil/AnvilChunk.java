@@ -1,6 +1,7 @@
 package me.shawlaf.mcworldtool.anvil;
 
 import dev.dewy.nbt.tags.collection.CompoundTag;
+import dev.dewy.nbt.tags.collection.ListTag;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import me.shawlaf.mcworldtool.anvil.versions.AnvilChunkGeneral;
@@ -38,4 +39,6 @@ public abstract class AnvilChunk {
     }
 
     public abstract long getInhabitedTime();
+
+    public abstract ListTag<CompoundTag> getTileEntities();
 }
