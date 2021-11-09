@@ -10,10 +10,16 @@ import me.shawlaf.mcworldtool.region.RegionFile;
 import me.shawlaf.mcworldtool.region.RegionUtil;
 import me.shawlaf.mcworldtool.util.DirectoryTraversal;
 import me.shawlaf.mcworldtool.util.FileUtil;
-import me.shawlaf.mcworldtool.util.MultithreadUtil;
+import me.tongfei.progressbar.ProgressBar;
+import me.tongfei.progressbar.ProgressBarBuilder;
+import me.tongfei.progressbar.ProgressBarStyle;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 @ExtensionMethod({
         FileUtil.class
@@ -47,34 +53,32 @@ public class TaskPurgeWorld {
         File outputPath = inputFile.getParentFile().getAbsoluteFile().child("%s-purged".formatted(inputFile.getName()));
         inputFile.copyDirectoryRecursively(outputPath);
 
-        File[] mcaFiles = DirectoryTraversal.discoverWhere(outputPath,
+        List<File> mcaFiles = DirectoryTraversal.discoverWhere(outputPath,
                 f -> f.getName().endsWith(".mca") && "region".equals(f.getParentFile().getAbsoluteFile().getName())
-        ).toArray(File[]::new);
+        );
 
-        int nThreads = Runtime.getRuntime().availableProcessors();
-        File[][] threadFiles = MultithreadUtil.splitTaskForNThreads(File.class, nThreads, mcaFiles, File[]::new, File[][]::new);
+        int totalRemovedChunks;
 
-        Thread[] threads = new Thread[nThreads];
-
-        for (int i = 0; i < nThreads; i++) {
-            final int finalI = i;
-
-            threads[i] = new Thread(() -> {
-                for (File regionFile : threadFiles[finalI]) {
-                    try {
-                        purgeChunks(regionFile);
-                    } catch (Exception e) {
-                        System.out.printf("Failed to purge Chunks from %s: %s%n", regionFile.getName(), e.getMessage());
-                    }
+        try (ProgressBar pb = new ProgressBarBuilder()
+                .setTaskName("Purging Chunks")
+                .setInitialMax(mcaFiles.size())
+                .setStyle(ProgressBarStyle.ASCII)
+                .setUpdateIntervalMillis(10)
+                .build()
+        ) {
+            totalRemovedChunks = mcaFiles.parallelStream().mapToInt(file -> {
+                try {
+                    return purgeChunks(file);
+                } catch (Exception e) {
+                    // System.out.printf("Failed to purge Chunks from %s: %s%n", file.getName(), e.getMessage());
+                    return 0;
+                } finally {
+                    pb.step();
                 }
-            });
-
-            threads[i].start();
+            }).sum();
         }
 
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        System.out.printf("Removed %d uninhabited chunks%n", totalRemovedChunks);
 
         long originalSize = inputFile.calculateSize();
         long newSize = outputPath.calculateSize();
@@ -85,7 +89,7 @@ public class TaskPurgeWorld {
     }
 
     @SneakyThrows
-    public static void purgeChunks(File mcaFile) {
+    public static int purgeChunks(File mcaFile) {
         RegionFile regionFile = new RegionFile(mcaFile);
         RegionFile target = new RegionFile();
 
@@ -115,6 +119,6 @@ public class TaskPurgeWorld {
             target.write(fos);
         }
 
-        System.out.printf("Purged %d Chunks from %s%n", removedChunks, mcaFile.getAbsolutePath());
+        return removedChunks;
     }
 }
