@@ -10,6 +10,8 @@ import java.util.zip.InflaterInputStream;
 
 public class RegionChunk {
 
+    private static final byte[] PADDING_4K = new byte[RegionUtil.FOUR_KB];
+
     @Getter
     private final int compressedSize;
     @Getter
@@ -81,11 +83,10 @@ public class RegionChunk {
         int remainder = written % RegionUtil.FOUR_KB;
 
         if (remainder != 0) {
-            int padding = RegionUtil.FOUR_KB - remainder;
-            byte[] paddingBytes = new byte[padding]; // Automatically initialized with all zeros
+            int paddingBytes = RegionUtil.FOUR_KB - remainder;
 
-            out.write(paddingBytes, 0, padding);
-            written += padding;
+            out.write(PADDING_4K, 0, paddingBytes);
+            written += paddingBytes;
         }
 
         return written / RegionUtil.FOUR_KB;
